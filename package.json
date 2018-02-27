@@ -1,0 +1,22 @@
+{
+  "name": "inforec",
+  "version": "1.0.0",
+  "description": "final project in information recovery course",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "alpha-sort": "^2.0.1",
+    "array-occurrence": "^1.0.0",
+    "body-parser": "^1.18.2",
+    "express": "^4.16.2",
+    "inverted-index": "^1.7.0",
+    "mongoose": "^5.0.7",
+    "split-string-words": "^1.0.0",
+    "strsplit": "^1.0.0",
+    "uniq": "^1.0.1"
+  }
+}
