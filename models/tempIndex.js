@@ -4,6 +4,7 @@ var mongoose = require('mongoose'),
 TempIndexSchema = new schema({
     term: String,
     docNumber: Number,
+    soundex: String,
     hits: Number
 });
 
