@@ -2,6 +2,7 @@ const mongoose = require('mongoose'),
       schema   = mongoose.Schema;
 
     sourceLibrarySchema = new schema({
+        id: Number,
         name: String,
         author: String,
         date: String,

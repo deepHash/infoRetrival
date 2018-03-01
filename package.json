@@ -12,6 +12,7 @@
     "alpha-sort": "^2.0.1",
     "array-occurrence": "^1.0.0",
     "body-parser": "^1.18.2",
+    "deepcopy": "^0.6.3",
     "express": "^4.16.2",
     "inverted-index": "^1.7.0",
     "mongoose": "^5.0.7",
