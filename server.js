@@ -23,11 +23,38 @@ app.use(
         next();
 });
 
+app.post('/parseDocuments/', (req, res, next) => {
+    data.parseDocuments(
+        req.body.text).then((result) => {
+        result.length === 0 ? next() : res.status(200).send(result);
+    }, (error) => {
+        console.log(error);
+        next();
+    })
+})
+
 app.post('/addNewDocument/', (req, res, next) => {
     data.addNewDocument(
-        req.body.text,
-        req.body.summary).then((result) => {
-        result.length === 0 ? next() : res.status(200).send(result);
+        req.body.docHeader, req.body.docText).then((result) => {
+        result.length === 0 ? next() : res.status(200).json(result);
+    }, (error) => {
+        console.log(error);
+        next();
+    })
+})
+
+app.post('/removeDocument/', (req, res, next) => {
+    data.removeDocument(req.body.id).then((result) => {
+        result.length === 0 ? next() : res.status(200).json(result);
+    }, (error) => {
+        console.log(error);
+        next();
+    })
+})
+
+app.get('/getAllDocuments/', (req,res,next) => {
+    data.getAllDocuments().then((result) => {
+        res.status(200).send(result);    
     }, (error) => {
         console.log(error);
         next();

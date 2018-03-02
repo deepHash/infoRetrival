@@ -9,11 +9,17 @@ const Q = require('q'),
       Increment = require('./../models/increment'),
       stopWords = require('./stopWords'),
       soundex = require('./soundex'),
+      sourceLibrary = require('./../models/sourceLibrary'),
       indexFile = require('./../models/indexFile'),
       postFile = require('./../models/postingFile'),
       TempIndex = require('./../models/tempIndex');
 
 class Indexing{
+
+    /**
+     * The following methods are inside class methods and not called
+     * By any route from a server, they are to be used internally only!
+     */
 
     getIncrements() {
         return new Promise((resolve, reject) => {
@@ -44,9 +50,10 @@ class Indexing{
             })
         })
     }
+    /**currently not in use, buggy from Promise.all inside indexAndPost() */
     updateIndex(updatedIndex) {
         return new Promise((resolve, reject) => {
-            indexFile.update({'term': updatedIndex.term}, {updatedIndex}, {upsert: true}, (err, result) => {
+            indexFile.update({'term': updatedIndex.term}, {updatedIndex}, (err, result) => {
                 if (err) reject(err);
                 else resolve(result);
             });
@@ -64,55 +71,76 @@ class Indexing{
             for(let i=0;i<tmpIndexArray.length; i++){
                 promiseArray.push(this.newIndex(tmpIndexArray[i]['term']));
             }
+            //update the post counter per post files to be added to DB
+            Increment.update({$inc:{'post': tmpIndexArray.length}}, (err) =>{
+                if (err) console.log(err)
+            });
             Promise.all(promiseArray).then(function(responseArray){
-                console.log(responseArray);
-                for(let j=0; j<tmpIndexArray.length; j++){
-                    //create a new entry in the post file for each
-                    var newPost = new postFile({
-                        post_id: ++post,
-                        docNumber: tmpIndexArray[j]['docNumber'],
-                        hits: tmpIndexArray[j]['hits'],
-                        show: true     
-                    });
-                    //save to post file
-                    // newPost.save((err) => {
-                    //     if(err) console.log(err);
-                    // })
-                    if (responseArray[j] === true){
-                        //if its first time in the indexing file, create a new entery in the indexing file
-                        var newIndex = new indexFile({
-                            term: tmpIndexArray[j]['term'],
-                            numOfDocs: 1,
-                            soundex: tmpIndexArray[j]['soundex'],
-                            locations: [{'post_id': post}]
-                        });
-                        //save to the indexing file
-                        // newIndex.save((err) => {
-                        //     if (err) console.log(err);
-                        // }) 
-                    }
-                    else{
-                        //if its not the first time 
-                        var updatedIndex = responseArray[j];
-                        updatedIndex.locations.push({'post_id': post});
-                        updatedIndex.numOfDocs++;
-                        //console.log(updatedIndex);
-                        //this.updateIndex(updatedIndex).then()
-                    }                        
-                }
-                console.log("post is: ", post);
-                this.setIncrements(source, post)
+                    //console.log(responseArray);
+                        for(let j=0; j<tmpIndexArray.length; j++){
+                            //create a new entry in the post file for each
+                            var newPost = new postFile({
+                                post_id: ++post,
+                                docNumber: tmpIndexArray[j]['docNumber'],
+                                hits: tmpIndexArray[j]['hits'],
+                                show: true     
+                            });
+                            //save to post file
+                            newPost.save((err) => {
+                                if(err) console.log(err);
+                            })
+                            if (responseArray[j] === true){
+                                //if its first time in the indexing file, create a new entery in the indexing file
+                                var newIndex = new indexFile({
+                                    term: tmpIndexArray[j]['term'],
+                                    numOfDocs: 1,
+                                    soundex: tmpIndexArray[j]['soundex'],
+                                    locations: [{'post_id': post}]
+                                });
+                                // save to the indexing file
+                                newIndex.save((err) => {
+                                    if (err) console.log(err);
+                                }) 
+                            }
+                            else{
+                                //if its not the first time 
+                                var updatedIndex = responseArray[j];
+                                updatedIndex.locations.push({'post_id': post});
+                                updatedIndex.numOfDocs++;
+                                //UPDATE the INDEX FILE
+                                indexFile.findOneAndUpdate({'term': updatedIndex.term},
+                                        {$set:{"numOfDocs": updatedIndex.numOfDocs,
+                                                "locations": updatedIndex.locations}}, 
+                                    (err, result) => {
+                                        if (err) console.log(err);
+                                    });
+                                //END OF INDEX FILE update
+                            }                        
+                        }
             });
 
         })
     }
+
+    /**
+     * The following methods are called by routes only from the server.js file
+     */
+
+    getAllDocuments() {
+        return new Promise((resolve, reject) => {
+            sourceLibrary.find({}, '-_id -text', (err, result) => {
+                if (err) reject(err);
+                else resolve(result);
+            })
+        })    
+    }
     
-    addNewDocument(text, summary) {
+    parseDocuments(text) {
         var workingText,
             noDupArray,
             count = 0,
             tmpIndexArray = [],
-            docNumber = 2; //change to dynamic
+            docNumber = 5; //change to dynamic
 
         return new Promise((resolve, reject) => {
             workingText = split(text.replace(/[^\w\s]/gi,''), /\s+/);//break text to words
@@ -139,7 +167,51 @@ class Indexing{
             resolve(tmpIndexArray);
         });
     }
+
+    addNewDocument(docHeader, docText) {
+        var source = -1,
+            headers = JSON.parse(docHeader);
+        return new Promise((resolve, reject) => {
+            //get the current index (ID) for the sourceLibrary elements
+            this.getIncrements().then((result) => {
+                source = result.source;
+                if (source != -1){
+                   //if successfully got the index from DB, increment it by 1 
+                   Increment.update({$inc:{'source': 1}}, (err) =>{
+                       if (err) console.log(err)
+                   }); 
+                }
+                //create a new document for the Source Library
+                let newDocument = new sourceLibrary({
+                    id: source,
+                    name: headers.name,
+                    author: headers.author,
+                    date: headers.date,
+                    text: docText,
+                    summary: headers.summary,
+                    parsed: false    
+                })
+                //save to the source library
+                newDocument.save((err) => {
+                    if (err) resolve("ERROR in document insertion, ",err);
+                    else resolve(`Entered as SourceID ${source} the following documenet: ${headers.name}`);
+                })                   
+            })
+        })
+    }
+
+    removeDocument(id) {
+        return new Promise((resolve, reject) => {
+                postFile.updateMany({'docNumber': id},
+                {$set:{"show": false}}, (err, result) => {
+                    if (err) reject(err);
+                    else resolve(result)
+              });
+        })
+    }
 }
+
+
 
 module.exports = () => {
     var indexing = new Indexing();
