@@ -23,10 +23,19 @@ app.use(
         next();
 });
 
-app.post('/parseDocuments/', (req, res, next) => {
-    data.parseDocuments(
-        req.body.text).then((result) => {
-        result.length === 0 ? next() : res.status(200).send(result);
+app.get('/result/:query', (req, res, next) => {
+    data.getQuery(req.params.query).then((result) => {
+        res.status(200).json(result);
+    }, (error) => {
+        console.log(error);
+        next();
+    })
+})
+
+
+app.get('/parseDocuments/', (req, res, next) => {
+    data.parseDocuments().then((result) => {
+        res.status(200).json(result);
     }, (error) => {
         console.log(error);
         next();
