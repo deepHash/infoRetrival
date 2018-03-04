@@ -67,6 +67,10 @@ class Indexing{
         })
     }
 
+    duplicateInOneParse() {
+
+    }
+
     indexAndPost(tmpIndexArray) {
         var source,
             post,
@@ -95,33 +99,39 @@ class Indexing{
                     newPost.save((err) => {
                         if(err) console.log(err);
                     })
-                    if (responseArray[j] === true){
-                        //if its first time in the indexing file, create a new entery in the indexing file
-                        var newIndex = new indexFile({
-                            term: tmpIndexArray[j]['term'],
-                            numOfDocs: 1,
-                            soundex: tmpIndexArray[j]['soundex'],
-                            locations: [{'post_id': post}]
-                        });
-                        // save to the indexing file
-                        newIndex.save((err) => {
-                            if (err) console.log(err);
-                         }) 
-                            }
-                    else{
-                        //if its not the first time 
-                        var updatedIndex = responseArray[j];
-                        updatedIndex.locations.push({'post_id': post});
-                        updatedIndex.numOfDocs++;
-                        //UPDATE the INDEX FILE
-                         indexFile.findOneAndUpdate({'term': updatedIndex.term},
-                                   {$set:{"numOfDocs": updatedIndex.numOfDocs,
-                                        "locations": updatedIndex.locations}}, 
-                            (err, result) => {
-                                if (err) console.log(err);
+                        if (responseArray[j] === true){
+                            //if its first time in the indexing file, create a new entery in the indexing file
+                            var newIndex = new indexFile({
+                                term: tmpIndexArray[j]['term'],
+                                numOfDocs: 1,
+                                soundex: tmpIndexArray[j]['soundex'],
+                                locations: [{'post_id': post}]
                             });
-                        //END OF INDEX FILE update
-                     }                        
+                            responseArray[j] = newIndex;
+                            // save to the indexing file
+                            newIndex.save((err) => {
+                                if (err) console.log(err);
+                             }) 
+                                }
+                        else{
+                            //if its not the first time 
+                            var updatedIndex = responseArray[j];
+                            updatedIndex.locations.push({'post_id': post});
+                            updatedIndex.numOfDocs++;
+                            //UPDATE the INDEX FILE
+                            responseArray[j] = updatedIndex;
+                             indexFile.findOneAndUpdate({'term': updatedIndex.term},
+                                       {$set:{"numOfDocs": updatedIndex.numOfDocs,
+                                            "locations": updatedIndex.locations}}, 
+                                (err, result) => {
+                                    if (err) console.log(err);
+                                });
+                            //END OF INDEX FILE update
+                         }
+                         //incase we have two words from diffrent documents  
+                        if((j+1 != tmpIndexArray.length) && tmpIndexArray[j]['term'] === tmpIndexArray[j+1]['term']){
+                            responseArray[j+1] = responseArray[j];
+                        }                  
                 }
             });
 
@@ -132,10 +142,14 @@ class Indexing{
      * The following methods are called by routes only from the server.js file
      */
 
-     getQuery(query) {
+    getSearch(query) {
          return new Promise((resolve, reject) => {
              console.log(query);
-             resolve("in query");
+             indexFile.find({$and: [{"term": "understand"}, {"term": "hold"}]},  (err, result) => {
+                                    console.log(result);
+                                    if (err) reject(err);
+                                    else resolve(result);
+                                })
          })
      }
 
@@ -165,25 +179,27 @@ class Indexing{
                         workingText = split(result[r].text.replace(/[^\w\s]/gi,''), /\s+/);//break text to words
                         workingText = workingText.map(w => stemmer(w.toLowerCase())); //convert all text in lowercase and stemm them
                         for(let i=0; i<workingText.length; i++){
-                            let tmpI = new TempIndex({
-                                term: workingText[i],
-                                docNumber: result[r].id,
-                                soundex: soundex(workingText[i]),
-                                hits: 1
-                            })
-                            tmpIndexArray.push(tmpI);
+                            if(workingText[i] !== ""){
+                                let tmpI = new TempIndex({
+                                    term: workingText[i],
+                                    docNumber: result[r].id,
+                                    soundex: soundex(workingText[i]),
+                                    hits: 1
+                                })
+                                tmpIndexArray.push(tmpI);
+                            }
                         }
                         //update in sourceLibrary the parsing boolean
-                        sourceLibrary.updateOne({'id': result[r].id}, {$set: {'parsed': true}},
-                                        (err, result) => {if (err) console.log(err)});                   
+                       sourceLibrary.updateOne({'id': result[r].id}, {$set: {'parsed': true}},
+                                       (err, result) => {if (err) console.log(err)});                   
                     }
                     tmpIndexArray = sortByKey(tmpIndexArray, 'term'); //sort text in alphabetical order
                     tmpIndexArray = stopWords(tmpIndexArray, 'term'); // remove all stop words
                     uniq(tmpIndexArray);// remove duplicates and update hits
     
                     this.indexAndPost(tmpIndexArray);//create index and post files
-                    resolve(documentCounter);
                 }
+                resolve(documentCounter);
             });
         });
     }

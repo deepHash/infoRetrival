@@ -23,8 +23,8 @@ app.use(
         next();
 });
 
-app.get('/result/:query', (req, res, next) => {
-    data.getQuery(req.params.query).then((result) => {
+app.get('/getSearch/:query', (req, res, next) => {
+    data.getSearch(req.params.query).then((result) => {
         res.status(200).json(result);
     }, (error) => {
         console.log(error);
