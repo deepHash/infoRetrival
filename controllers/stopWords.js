@@ -1,5 +1,5 @@
 var words = [
-    'about', 'after', 'all', 'also', 'am', 'an', 'and', 'another', 'any', 'are', 'as', 'at', 'be',
+    'about', 'after', 'all', 'also', 'am', 'an', 'another', 'any', 'are', 'as', 'at', 'be',
     'because', 'been', 'before', 'being', 'between', 'both', 'but', 'by', 'came', 'can',
     'come', 'could', 'did', 'do', 'each', 'for', 'from', 'get', 'got', 'has', 'had',
     'he', 'have', 'her', 'here', 'him', 'himself', 'his', 'how', 'if', 'in', 'into',

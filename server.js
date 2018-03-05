@@ -23,8 +23,8 @@ app.use(
         next();
 });
 
-app.get('/getSearch/:query', (req, res, next) => {
-    data.getSearch(req.params.query).then((result) => {
+app.get('/getSearch/:query/:soundex', (req, res, next) => {
+    data.getSearch(req.params.query, req.params.seoundex).then((result) => {
         res.status(200).json(result);
     }, (error) => {
         console.log(error);

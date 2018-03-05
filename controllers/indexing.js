@@ -138,18 +138,95 @@ class Indexing{
         })
     }
 
+    getBinaryExpression(arg1, arg2, op) {
+
+    }
+    getPostFromDB(post) {
+        return new Promise((resolve, reject) => {
+            postFile.find({$and: [{'post_id': post}, {'show': true}]}, (err, result) => {
+                if (err) reject (err);
+                else if(result == null) resolve(null);
+                else resolve(result[0]);
+            }) 
+        })
+    }
+    
+    getDocByPostID(indexs){
+        var promiseArray = [];
+        return new Promise((resolve, reject) => {
+            if (typeof(indexs) == Array) {
+                for (let i=0; i<indexs.length; i++) {
+                    for (let j=0; j<indexs[i].location.length; j++) {
+                        promiseArray.push(this.getPostFromDB(indexs[i].locations[j].post_id));
+                    } 
+                }
+            }
+            else {
+                for (let j=0; j<indexs.locations.length; j++) {
+                    promiseArray.push(this.getPostFromDB(indexs.locations[j].post_id));
+                }
+            }
+            Promise.all(promiseArray).then(function(documentsArray){
+                resolve(documentsArray)
+            });
+        })
+    }
+
+    getDocumentNumber(term, soundex) {
+        return new Promise((resolve, reject) => {
+            //if we need to get indexes not only by exact term but the ones that sound similar aswell
+            if (soundex) {
+                indexFile.find({$or: [{'term': term}, {'soundex': soundex(term)}]}, (err, result) => {
+                    if (err) reject(err);
+                    else {
+                        this.getDocByPostID(result).then((res, err) => {
+                            resolve(res);
+                        })
+                    };
+                })               
+            }
+            else {
+                indexFile.findOne({'term': term}, (err, result) => {
+                    if (err) reject(err);
+                    else {
+                        this.getDocByPostID(result).then((res, err) => {
+                            resolve(res);
+                        })
+                    };
+                })
+            }
+        })
+    }
+
     /**
      * The following methods are called by routes only from the server.js file
      */
 
-    getSearch(query) {
+    getSearch(query, soundex) {
+        var search;
+        var pStart,
+            pEnd;
          return new Promise((resolve, reject) => {
-             console.log(query);
-             indexFile.find({$and: [{"term": "understand"}, {"term": "hold"}]},  (err, result) => {
-                                    console.log(result);
-                                    if (err) reject(err);
-                                    else resolve(result);
-                                })
+            search = split(query.replace(/^[\w\s() ]/,query[0]));
+            // for (let i in search) {
+            //         if(search[i][0] == '(' && search[i] != '(not') {
+            //             let word = search[i];
+            //             this.getBinaryExpression(search[i], search[i+2], search[i+1])
+            //             console.log(search[i][word.length-1]);
+            //             search.splice(i,3);
+            //         }
+            //         else if(search[i] == '.') {
+                        
+            //         }
+                
+            // }
+            search = search.map(w => stemmer(w.toLowerCase()));
+            for (let i in search) {
+                this.getDocumentNumber(search[i], false).then((result, err) => {
+                    console.log(result);
+                })
+            }
+            resolve(search);
          })
      }
 
@@ -176,6 +253,7 @@ class Indexing{
                 }
                 else {
                     for (let r=0; r<result.length; r++, documentCounter++){
+            headers = docHeader;
                         workingText = split(result[r].text.replace(/[^\w\s]/gi,''), /\s+/);//break text to words
                         workingText = workingText.map(w => stemmer(w.toLowerCase())); //convert all text in lowercase and stemm them
                         for(let i=0; i<workingText.length; i++){
@@ -206,7 +284,7 @@ class Indexing{
 
     addNewDocument(docHeader, docText) {
         var source = -1,
-            headers = JSON.parse(docHeader);
+            headers = docHeader;
         return new Promise((resolve, reject) => {
             //get the current index (ID) for the sourceLibrary elements
             this.getIncrements().then((result) => {
