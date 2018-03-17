@@ -8,7 +8,8 @@ const mongoose = require('mongoose'),
         date: String,
         text: {type: String, required: true},
         summary: {type: String, required:true },
-        parsed: Boolean
+        parsed: Boolean,
+        show: Boolean
     },{collection: 'SourceLibrary'});
 
 var SourceLibrary = mongoose.model('SourceLibrary', sourceLibrarySchema);

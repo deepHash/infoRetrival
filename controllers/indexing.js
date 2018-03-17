@@ -141,12 +141,13 @@ class Indexing{
     getBinaryExpression(arg1, arg2, op) {
 
     }
+
     getPostFromDB(post) {
         return new Promise((resolve, reject) => {
             postFile.find({$and: [{'post_id': post}, {'show': true}]}, (err, result) => {
                 if (err) reject (err);
                 else if(result == null) resolve(null);
-                else resolve(result[0]);
+                else {resolve(result[0])}
             }) 
         })
     }
@@ -167,6 +168,8 @@ class Indexing{
                 }
             }
             Promise.all(promiseArray).then(function(documentsArray){
+                //remove empty undefined results
+                documentsArray = documentsArray.filter(function(n){ return n != undefined });
                 resolve(documentsArray)
             });
         })
@@ -174,13 +177,18 @@ class Indexing{
 
     getDocumentNumber(term, soundex) {
         return new Promise((resolve, reject) => {
+            var docArray = [];
+            
             //if we need to get indexes not only by exact term but the ones that sound similar aswell
             if (soundex) {
                 indexFile.find({$or: [{'term': term}, {'soundex': soundex(term)}]}, (err, result) => {
                     if (err) reject(err);
                     else {
                         this.getDocByPostID(result).then((res, err) => {
-                            resolve(res);
+                            for(let i in res) {
+                                docArray.push(res[i].docNumber)
+                            }
+                            resolve(docArray);
                         })
                     };
                 })               
@@ -190,12 +198,22 @@ class Indexing{
                     if (err) reject(err);
                     else {
                         this.getDocByPostID(result).then((res, err) => {
-                            resolve(res);
+                            for(let i in res) {
+                                docArray.push(res[i].docNumber)
+                            }
+                            resolve(docArray);
                         })
                     };
                 })
             }
         })
+    }
+
+    isOperator(word) {
+        if (word == "and" || word == "or" || word == "not")
+            return true;
+        else
+            return false;
     }
 
     /**
@@ -205,9 +223,11 @@ class Indexing{
     getSearch(query, soundex) {
         var search;
         var pStart,
-            pEnd;
+            pEnd,
+            pArray = []; // airplane variable
          return new Promise((resolve, reject) => {
             search = split(query.replace(/^[\w\s() ]/,query[0]));
+            //** the following code returns the relevant post IDs, need to check with multiple and soundex */
             // for (let i in search) {
             //         if(search[i][0] == '(' && search[i] != '(not') {
             //             let word = search[i];
@@ -220,23 +240,52 @@ class Indexing{
             //         }
                 
             // }
+            
+            //END OF THE FOLLOWING CODE
+
+            
             search = search.map(w => stemmer(w.toLowerCase()));
             for (let i in search) {
-                this.getDocumentNumber(search[i], false).then((result, err) => {
-                    console.log(result);
-                })
+                if (!this.isOperator(search[i])){
+                    this.getDocumentNumber(search[i], false).then((result, err) => {
+                       pArray.push(result)
+                    })
+                }
+                else {pArray.push(search[i]);}   
             }
-            resolve(search);
+            /**@ToDo 7/3 Airplane code, no internet, double check! */
+            for(let i=0; i<search.length; i++) {
+                if(search[i][0] == '(') {
+                    for(let j=i; j<search.length; j++){
+                        let word = search[j];
+                        pArray.push(search[j]);
+                        if(word[word.length-1] == ')') {
+                            //console.log("test", word);
+                        }
+
+                    }
+                } 
+            }
+            resolve(pArray);
          })
      }
 
     getAllDocuments() {
         return new Promise((resolve, reject) => {
-            sourceLibrary.find({}, '-_id -text', (err, result) => {
+            sourceLibrary.find({}, '-_id', (err, result) => {
                 if (err) reject(err);
                 else resolve(result);
             })
         })    
+    }
+
+    getDocumentByID(id) {
+        return new Promise((resolve, reject) => {
+            sourceLibrary.find({'id': id}, '-_id', (err, result) => {
+                if (err) reject(err);
+                else resolve(result[0]);
+            })
+        }) 
     }
     
     parseDocuments() {
@@ -302,7 +351,8 @@ class Indexing{
                     date: headers.date,
                     text: docText,
                     summary: headers.summary,
-                    parsed: false    
+                    parsed: false,
+                    show: true    
                 })
                 //save to the source library
                 newDocument.save((err) => {
@@ -315,6 +365,11 @@ class Indexing{
 
     removeDocument(id) {
         return new Promise((resolve, reject) => {
+                sourceLibrary.update({'docNumber': id}, 
+                {$set:{"show": false}}, (err) => {
+                    if (err) reject (err);
+                });
+
                 postFile.updateMany({'docNumber': id},
                 {$set:{"show": false}}, (err, result) => {
                     if (err) reject(err);

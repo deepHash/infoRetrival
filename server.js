@@ -70,6 +70,15 @@ app.get('/getAllDocuments/', (req,res,next) => {
     })
 })
 
+app.get('/getDocumentByID/:id', (req,res,next) => {
+    data.getDocumentByID(req.params.id).then((result) => {
+        res.status(200).send(result);    
+    }, (error) => {
+        console.log(error);
+        next();
+    })
+})
+
 //error 404 route
 app.all('*', (req, res) => {
     res.send(`error: route not found, global handler`);
