@@ -1,3 +1,6 @@
+/**Implemented the porter stemming algorithm 
+ * as written in http://snowball.tartarus.org/algorithms/porter/stemmer.html */
+
 /* Character code for `y`. */
 var CC_Y = 'y'.charCodeAt(0);
 
