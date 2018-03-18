@@ -160,9 +160,9 @@ class Indexing{
             if(indexs == null) {
                 resolve("");
             }
-            if (typeof(indexs) == Array) {
+            if (indexs instanceof Array) {
                 for (let i=0; i<indexs.length; i++) {
-                    for (let j=0; j<indexs[i].location.length; j++) {
+                    for (let j=0; j<indexs[i].locations.length; j++) {
                         promiseArray.push(this.getPostFromDB(indexs[i].locations[j].post_id));
                     } 
                 }
@@ -181,19 +181,21 @@ class Indexing{
     }
 
     isOperator(word) {
-        if (word == "and" || word == "or" || word == "not")
-            return true;
-        else
-            return false;
+        var ops = ["and", "or", "not", "openBrackets", "closeBrackets"];
+        for(let i in ops){
+            if (ops[i] == word)
+                return true;
+        }
+        return false;
     }
 
-    getDocumentNumber(term, soundex) {
+    getDocumentNumber(term, isSoundex) {
         return new Promise((resolve, reject) => {
             var docArray = [];
             if(this.isOperator(term))   {resolve(term)}
             else {
              //if we need to get indexes not only by exact term but the ones that sound similar aswell
-                if (soundex) {
+                if (isSoundex) {
                     indexFile.find({$or: [{'term': term}, {'soundex': soundex(term)}]}, (err, result) => {
                         if (err) reject(err);
                         else {
@@ -228,143 +230,167 @@ class Indexing{
 
     getSearch(query, soundex) {
         var search;
-        var pStart,
-            pEnd,
+        var pFlag = false,
+            pCounter = 1,
+            pArray = [],
             allDocsID = [],
             promiseArray = []; 
          return new Promise((resolve, reject) => {
             search = split(query.replace(/^[\w\s() ]/,query[0]));
-            //** the following code returns the relevant post IDs, need to check with multiple and soundex */
-            // for (let i in search) {
-            //         if(search[i][0] == '(' && search[i] != '(not') {
-            //             let word = search[i];
-            //             this.getBinaryExpression(search[i], search[i+2], search[i+1])
-            //             console.log(search[i][word.length-1]);
-            //             search.splice(i,3);
-            //         }
-            //         else if(search[i] == '.') {
-                        
-            //         }
-                
-            // }
-            
-            //END OF THE FOLLOWING CODE
 
             //get all the valid document numbers for 'NOT' operator
             this.getValidDocIDs().then((res, err) => {
                 for (let i in res) {
                     allDocsID.push(res[i].id);
                 }
-            })
-            
+            })        
             search = search.map(w => stemmer(w.toLowerCase()));
-            for (let i in search) {
-                promiseArray.push(this.getDocumentNumber(search[i], soundex));
-            }
-            Promise.all(promiseArray).then(function(resultArray){
-                try {
-                    var searchArray = resultArray;
-                for (let j=0; j<searchArray.length; j++){
-                    console.log("BEFORE LOOP", searchArray);
-                    if (!(searchArray[j] instanceof Array)) {
-                        //unary NOT Operator
-                        if ((searchArray[j] == 'not') && (searchArray[j+1] == 'not')) {
-                            throw new Error();
-                        }
-                        if ((searchArray[j] == 'not') || (searchArray[j+1] == 'not')){
-                            console.log("IN if search array = not is", searchArray[j]);
-                            let notArray = allDocsID;
-                            //IF NOT as another operator infornt of him like 'A or not B'
-                            if (searchArray[j+1] == 'not') {
-                                for(let s=0; s<allDocsID.length; s++) {
-                                    for(let t=0; t<searchArray[j+2].length; t++) {
-                                        if (allDocsID[s] == searchArray[j+2][t]){
-                                            //remove from notArray the document that we found
-                                            var index = notArray.indexOf(allDocsID[s]);
-                                            if (index !== -1) notArray.splice(index, 1);
-                                        }
-                                    }
-                                }
-                                //update searchArray accordingly
-                                searchArray[j+1] = notArray;
-                                searchArray.splice(j+2,1);
-                                j--;
-                            }
-                            //IF NOT is shown first, no operator before him
-                            else {
-                                for(let s=0; s<allDocsID.length; s++) {
-                                    for(let t=0; t<searchArray[j+1].length; t++) {
-                                        if (allDocsID[s] == searchArray[j+1][t]){
-                                            var index = notArray.indexOf(allDocsID[s]);
-                                            if (index !== -1) notArray.splice(index, 1);
-                                        }
-                                    }
-                                }
-                                searchArray[j] = notArray;
-                                searchArray.splice(j+1,1);
-                                j--;
-                                console.log("AT NOT j is:",j, searchArray);
-
-                            }
-                        }
-                        else {
-                            //arg1 and arg2 are groups of documents, e.x: {D1, D2, D5}, op is operator such as 'AND'
-                            let arg1 = searchArray[j-1],
-                                arg2 = searchArray[j+1],
-                                op   = searchArray[j];
-                                console.log(`arg1 is: ${arg1}, arg2 is: ${arg2}, and op is: ${op}`)
-                            if (op == "or") {
-                                //merge arrays and keep unique objects
-                                searchArray[j+1] = arg1.concat(arg2.filter(function (item) {
-                                    return arg1.indexOf(item) < 0;
-                                }));
-                                //remove arg1 and arg2 from orginal array and set new group instead, change counter accordingly
-                                searchArray.splice(j-1,2);
-                                j = j-2;
-                            }
-                            else {
-                                console.log("IN AND", searchArray)
-                                let andArray = [];
-                                //iterate through both arrays and get only documents that show in both
-                                for (let s=0; s<arg1.length; s++) {
-                                    for(let t=0; t<arg2.length; t++) {
-                                        if (arg1[s] == arg2[t]){
-                                            andArray.push(arg1[s]);
-                                            t=arg2.length;
-                                        }
-                                    }
-                                }
-                                //remove arg1 and arg2 from orginal array and set new group instead, change counter accordingly
-                                searchArray[j+1] = andArray;
-                                searchArray.splice(j-1,2);
-                                j = j-2;
-                            }
-                        }
-                    }
-                }
-                sourceLibrary.find({'id': {$in: searchArray[0]} }, (err, result) => {
-                    if (err) console.log (err);
-                    else resolve(result);
-                })
-                //resolve(searchArray[0]);
-                } catch(e) {
-                    console.log(e);
-                    resolve("invalid query");
-                }
-            });
-            /**@ToDo 7/3 Airplane code, no internet, double check! */
             for(let i=0; i<search.length; i++) {
                 if(search[i][0] == '(') {
                     for(let j=i; j<search.length; j++){
                         let word = search[j];
                         pArray.push(search[j]);
                         if(word[word.length-1] == ')') {
-                            //console.log("test", word);
+                            //trim the parentheses
+                            search[i] = pArray[0] = pArray[0].substr(1);
+                            search[j] = pArray[j-i] = pArray[j-i].substr(0, word.length-1);
+                            //add parentheses in the search
+                            search.splice(i, 0, 'openBrackets');
+                            search.splice(j+2, 0, 'closeBrackets');
+                            pFlag = true; //flag that we have brackets in query
+                            pCounter++;
                         }
 
                     }
                 } 
             }
+            for (let i in search) {
+                promiseArray.push(this.getDocumentNumber(search[i], soundex));
+            }
+            Promise.all(promiseArray).then(function(resultArray){
+                //maybe insertBracketsOP and splice it instead of the brackets in resultArray
+                var searchArray = [];
+                try {
+                  if(pFlag){
+                        for(let w=0; w<resultArray.length; w++){
+                            if(resultArray[w] == 'openBrackets'){
+                                w++;
+                                while(resultArray[w] != 'closeBrackets'){
+                                    searchArray.push(resultArray[w]);
+                                    w++;
+                                }
+                            }
+                        }
+                  }
+                  else {searchArray = resultArray};
+                  do {  
+                    for (let j=0; j<searchArray.length; j++){
+                        if (!(searchArray[j] instanceof Array)) {
+                            //unary NOT Operator
+                            if ((searchArray[j] == 'not') && (searchArray[j+1] == 'not')) {
+                                throw new Error();
+                            }
+                            if ((searchArray[j] == 'not') || (searchArray[j+1] == 'not')){
+                                let notArray = allDocsID;
+                                //IF NOT as another operator infornt of him like 'A or not B'
+                                if (searchArray[j+1] == 'not') {
+                                    for(let s=0; s<allDocsID.length; s++) {
+                                        for(let t=0; t<searchArray[j+2].length; t++) {
+                                            if (allDocsID[s] == searchArray[j+2][t]){
+                                                //remove from notArray the document that we found
+                                                var index = notArray.indexOf(allDocsID[s]);
+                                                if (index !== -1) notArray.splice(index, 1);
+                                            }
+                                        }
+                                    }
+                                    //update searchArray accordingly
+                                    searchArray[j+1] = notArray;
+                                    searchArray.splice(j+2,1);
+                                    j--;
+                                }
+                                //IF NOT is shown first, no operator before him
+                                else {
+                                    for(let s=0; s<allDocsID.length; s++) {
+                                        for(let t=0; t<searchArray[j+1].length; t++) {
+                                            if (allDocsID[s] == searchArray[j+1][t]){
+                                                var index = notArray.indexOf(allDocsID[s]);
+                                                if (index !== -1) notArray.splice(index, 1);
+                                            }
+                                        }
+                                    }
+                                    searchArray[j] = notArray;
+                                    searchArray.splice(j+1,1);
+                                    j--;
+                                }
+                            }
+                            else {
+                                //arg1 and arg2 are groups of documents, e.x: {D1, D2, D5}, op is operator such as 'AND'
+                                let arg1 = searchArray[j-1],
+                                    arg2 = searchArray[j+1],
+                                    op   = searchArray[j];
+                                    console.log(`arg1 is: ${arg1}, arg2 is: ${arg2}, and op is: ${op}`)
+                                if (op == "or") {
+                                    //merge arrays and keep unique objects
+                                    searchArray[j+1] = arg1.concat(arg2.filter(function (item) {
+                                        return arg1.indexOf(item) < 0;
+                                    }));
+                                    //remove arg1 and arg2 from orginal array and set new group instead, change counter accordingly
+                                    searchArray.splice(j-1,2);
+                                    j = j-2;
+                                }
+                                else {
+                                    let andArray = [];
+                                    //iterate through both arrays and get only documents that show in both
+                                    for (let s=0; s<arg1.length; s++) {
+                                        for(let t=0; t<arg2.length; t++) {
+                                            if (arg1[s] == arg2[t]){
+                                                andArray.push(arg1[s]);
+                                                t=arg2.length;
+                                            }
+                                        }
+                                    }
+                                    //remove arg1 and arg2 from orginal array and set new group instead, change counter accordingly
+                                    searchArray[j+1] = andArray;
+                                    searchArray.splice(j-1,2);
+                                    j = j-2;
+                                }
+                            }
+                        }
+                      }
+                      pCounter--;
+                      if(pFlag){
+                        for(let w=0; w<resultArray.length; w++){
+
+                            if(resultArray[w] == 'openBrackets'){
+                                let wCounter = w;
+                                //count how much the brackets query take and remove it
+                                while(resultArray[wCounter] != 'closeBrackets'){
+                                    wCounter++;
+                                }
+                                wCounter++;
+                                //remove the brackets operators and query inside them
+                                resultArray.splice(w,wCounter-w);
+                                //add instead the result of the brackets
+                                for(let r=0; r<searchArray[0].length; r++) {
+                                    resultArray.splice(w+r, 0, searchArray[0][r]);
+                                }
+                            }
+                        }
+                        pFlag = false;
+                        searchArray = resultArray;
+                      }
+
+                  }while(pCounter>0)
+                //get documents by the IDs that we found
+                sourceLibrary.find({'id': {$in: searchArray[0]} }, (err, result) => {
+                    if (err) console.log (err);
+                    else resolve(result);
+                })
+                } catch(e) {
+                    console.log(e);
+                    resolve("invalid query");
+                }
+            });
          })
      }
 
